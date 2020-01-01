@@ -10,6 +10,11 @@ homepage = "https://github.com/jarcane/rouler"
 documentation = "https://docs.rs/rouler/"
 repository = "https://github.com/jarcane/rouler"
 
+[features]
+wasm = ["rand/wasm-bindgen"]
+
 [dependencies]
-pest = "0.4.0"
-rand = "0.3.0"
+pest = "1.0"
+pest_derive = "1.0"
+lazy_static = "1.0"
+rand = "0.7"
