@@ -14,7 +14,8 @@ pub fn roll_dice_raw(num: i64, sides: u64) -> i64 {
 }
 
 pub fn roll_custom_dice_raw(num: i64, sides: &[u64]) -> i64 {
+    use rand::seq::SliceRandom;
     let mut rng = thread_rng();
 
-    (0..num.abs()).map(|_| rng.choose(sides).unwrap()).fold(0, |acc, x| acc + *x as i64)
+    (0..num.abs()).map(|_| sides.choose(&mut rng).unwrap()).fold(0, |acc, x| acc + *x as i64)
 }
