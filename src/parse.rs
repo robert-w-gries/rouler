@@ -16,11 +16,10 @@ lazy_static! {
         use self::Assoc::*;
         use self::Rule::*;
 
-        // Order of precedence: "+-" is less than "*/" is less than "dD"
+        // Order of precedence: "+-" is less than "*/"
         PrecClimber::new(vec![
             Operator::new(plus, Left) | Operator::new(minus, Left),
             Operator::new(times, Left) | Operator::new(slash, Left),
-            Operator::new(roll, Right),
         ])
     };
 }
@@ -29,53 +28,48 @@ lazy_static! {
 #[grammar = "rouler.pest"]
 pub struct RollParser;
 
-// Force recompile when parse changes
-const _GRAMMAR : &'static str = include_str!("rouler.pest");
-
 pub fn compute(expr: Pairs<Rule>) -> i64 {
+    let primary = |pair: Pair<Rule>| match pair.as_rule() {
+        Rule::int => pair.as_str().parse::<u64>().unwrap() as i64,
+        Rule::number => pair.as_str().parse::<i64>().unwrap().into(),
+        Rule::expr => compute(pair.into_inner()),
+        Rule::roll => {
+            let mut inner = pair.into_inner();
+            let num_rolls = {
+                let rolls = inner.next().unwrap();
+                rolls.as_str().parse::<i64>().expect("Could not parse number of rolls")
+            };
+            let die_type = inner.next().unwrap();
+            match die_type.as_rule() {
+                Rule::int => {
+                    let num_sides = die_type.as_str().parse::<i64>().expect("Could not parse number of sides");
+                    num_rolls.signum() * roll_dice_raw(num_rolls.abs(), num_sides as u64)
+                },
+                Rule::custom_die => {
+                    let mut inner = die_type.clone().into_inner();
+                    let mut sides = vec![];
+                    while let Some(side) = inner.next() {
+                        sides.push(side.as_str().parse::<u64>().expect("Could not parse custom side"));
+                    }
+                    num_rolls.signum() * roll_custom_dice_raw(num_rolls.abs(), &sides)
+                },
+                _ => unreachable!(),
+            }
+        },
+        _ => unreachable!(),
+    };
+
+    let infix = |lhs: i64, op: Pair<Rule>, rhs: i64| match op.as_rule() {
+        Rule::plus => lhs + rhs,
+        Rule::minus => lhs - rhs,
+        Rule::times => lhs * rhs,
+        Rule::slash => lhs / rhs,
+        _ => unreachable!(),
+    };
+
     PREC_CLIMBER.climb(
         expr,
-        |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::number => pair.as_str().parse::<i64>().unwrap().into(),
-            Rule::expr => compute(pair.into_inner()),
-            Rule::custom_dice => {
-                let mut inner = pair.into_inner();
-                // LHS
-                let num = inner.next().unwrap();
-                let lhs = num.as_str().parse::<i64>().expect("Did not find a number on LHS!");
-                // Operator
-                let d = inner.next().unwrap().as_str();
-                assert!(d == "d" || d == "D");
-                // RHS
-                let mut sides = vec![];
-                while let Some(s) = inner.next() {
-                    // Collect numbers
-                    if s.as_rule() == Rule::number {
-                        sides.push(s.as_str().parse::<u64>().expect("Non-number found on RHS!"));
-                    }
-                }
-                lhs.signum() * roll_custom_dice_raw(lhs.abs(), &sides)
-            },
-            _ => unreachable!(),
-        },
-        |lhs: i64, op: Pair<Rule>, rhs: i64| match op.as_rule() {
-            Rule::roll => {
-                if rhs < 1 {
-                    panic!("Sides must be greater than zero")
-                } else {
-                    match lhs.signum() {
-                        0 => panic!("Number of sides must not be zero"),
-                        -1 => -roll_dice_raw(lhs.abs(), rhs as u64),
-                        1 => roll_dice_raw(lhs.abs(), rhs as u64),
-                        _ => unreachable!(),
-                    }
-                }
-            },
-            Rule::plus => lhs + rhs,
-            Rule::minus => lhs - rhs,
-            Rule::times => lhs * rhs,
-            Rule::slash => lhs / rhs,
-            _ => unreachable!(),
-        }
+        primary,
+        infix,
     )
 }

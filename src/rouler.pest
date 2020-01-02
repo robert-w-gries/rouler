@@ -1,4 +1,6 @@
-number = @{ "-"? ~ ("0" | '1'..'9' ~ '0'..'9'*) }
+number = @{ sign? ~ int }
+  sign = { "+" | "-" }
+  int = @{ ASCII_DIGIT+ }
 
 op = _{ plus | minus | times | slash }
   plus = { "+" }
@@ -6,14 +8,13 @@ op = _{ plus | minus | times | slash }
   times = { "*" }
   slash = { "/" }
 
-dice = _{ number ~ (roll ~ number) }
-  roll = { "d" | "D" }
-custom_dice = { number ~ roll ~ sides }
-  sides = _{ "[" ~ number ~ ("," ~ number )* ~ "]" }
+custom_die = { "[" ~ int ~ ("," ~ int )* ~ "]" }
+roll = { number ~ ^"d" ~ (custom_die | int) }
 
 expr = { term ~ (op ~ term)* }
-  term = _{ custom_dice | dice | number | "(" ~ expr ~ ")" }
+term = _{ roll | number | "(" ~ expr ~ ")" }
 
-calc = _{ soi ~ expr ~ eoi }
+calc = _{ SOI ~ expr ~ EOI }
 
-whitespace = _{ " " }
+WHITESPACE = _{ " " | "\t" | "\n" }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

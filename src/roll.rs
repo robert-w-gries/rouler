@@ -10,6 +10,7 @@ use std::fmt;
 
 use parse::*;
 use pest::*;
+use pest::error::Error;
 
 /// A simple function for throwaway die rolls that do not need to be saved as a
 /// `Roller`. Provided for convenience.
