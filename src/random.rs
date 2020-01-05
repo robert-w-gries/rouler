@@ -7,10 +7,26 @@
 
 use rand::{distributions::{Distribution, Uniform}, thread_rng};
 
+const MAX_ROLLS: u64 = 1000;
+const MAX_SIDES: u64 = u32::max_value() as u64;
+const MAX_CUSTOM_SIDES: usize = 1000;
+
 pub fn roll_dice_raw(num: u64, sides: u64) -> u64 {
     if sides == 0 {
         return 0;
     }
+
+    let num = if num > MAX_ROLLS {
+        MAX_ROLLS
+    } else {
+        num
+    };
+
+    let sides = if sides > MAX_SIDES {
+        MAX_SIDES
+    } else {
+        sides
+    };
 
     // The `rand` docs recommend constructing `Uniform` distribution to make
     // sampling of multiple values faster.
@@ -24,16 +40,27 @@ pub fn roll_custom_dice_raw(num: u64, sides: &[i64]) -> i64 {
         return 0;
     }
 
+    let num = if num > MAX_ROLLS {
+        MAX_ROLLS
+    } else {
+        num
+    };
+
+    let sides = if sides.len() > MAX_CUSTOM_SIDES {
+        &sides[..MAX_CUSTOM_SIDES]
+    } else {
+        &sides[..]
+    };
+
     use rand::seq::SliceRandom;
     let mut rng = thread_rng();
-
     (0..num).map(|_| sides.choose(&mut rng).unwrap()).fold(0, |acc, x| acc + *x)
 }
 
 #[cfg(test)]
 mod tests {
     mod normal {
-        use super::super::roll_dice_raw;
+        use super::super::{MAX_ROLLS, MAX_SIDES, roll_dice_raw};
 
         #[test]
         fn zero_d_zero() {
@@ -64,10 +91,17 @@ mod tests {
                 assert!(1 <= roll && roll <= x);
             }
         }
+
+        #[test]
+        fn max() {
+            let roll = roll_dice_raw(u64::max_value(), u64::max_value());
+            let max = MAX_ROLLS * MAX_SIDES;
+            assert!(1 <= roll && roll <= max);
+        }
     }
 
     mod custom {
-        use super::super::roll_custom_dice_raw;
+        use super::super::{MAX_ROLLS, MAX_CUSTOM_SIDES, roll_custom_dice_raw};
 
         #[test]
         fn zero_d_empty() {
@@ -99,6 +133,14 @@ mod tests {
         #[test]
         fn many_d_one() {
             assert_eq!(roll_custom_dice_raw(100, &[42]), 100*42);
+        }
+
+        #[test]
+        fn max() {
+            let custom_sides: Vec<i64> = (1..(MAX_CUSTOM_SIDES * 2) as i64).collect();
+            let roll = roll_custom_dice_raw(u64::max_value(), &custom_sides[..]);
+            let max = (MAX_ROLLS as u64) * (MAX_CUSTOM_SIDES as u64);
+            assert!(MAX_ROLLS as i64 <= roll && roll <= max as i64);
         }
     }
 }
