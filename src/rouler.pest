@@ -14,7 +14,8 @@ roll = ${ int ~ ^"d" ~ (custom_die | uint) }
 expr = { term ~ (op ~ term)* ~ ANY* }
 term = _{ roll | int | "(" ~ expr ~ ")" }
 
-calc = _{ SOI ~ expr ~ EOI }
+roll_cmd = _{ "/roll" | "/r" }
+calc = _{ SOI ~ roll_cmd? ~ expr ~ EOI }
 
 WHITESPACE = _{ " " | "\t" | "\n" }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

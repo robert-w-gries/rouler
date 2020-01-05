@@ -91,3 +91,20 @@ fn rollers_are_iterators() {
     assert_eq!(5, roll5.len());
     assert_eq!(d20.total(), roll5.pop().unwrap());
 }
+
+#[test]
+fn roll20_roll_cmd() {
+    assert_eq!(Roller::new("/roll 1 + 1").total(), 2);
+    assert_eq!(Roller::new("/r 1 + 1").total(), 2);
+}
+
+#[test]
+#[should_panic(expected = "Failed to parse")]
+fn roll20_bad_roll_cmd() {
+    assert_ne!(Roller::new("/ro 1 + 1").total(), 2);
+}
+
+#[test]
+fn roll20_including_addtional_information() {
+    assert_range!(6 => Roller::new("/roll 1d20+5 \\ +5 Roll for Initiative").total() => 25);
+}
