@@ -1,6 +1,6 @@
-number = @{ sign? ~ int }
+int = @{ sign? ~ uint }
   sign = { "+" | "-" }
-  int = @{ ASCII_DIGIT+ }
+  uint = @{ ASCII_DIGIT+ }
 
 op = _{ plus | minus | times | slash }
   plus = { "+" }
@@ -8,11 +8,11 @@ op = _{ plus | minus | times | slash }
   times = { "*" }
   slash = { "/" }
 
-custom_die = { "[" ~ int ~ ("," ~ int )* ~ "]" }
-roll = { number ~ ^"d" ~ (custom_die | int) }
+custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
+roll = ${ int ~ ^"d" ~ (custom_die | uint) }
 
-expr = { term ~ (op ~ term)* }
-term = _{ roll | number | "(" ~ expr ~ ")" }
+expr = { term ~ (op ~ term)* ~ ANY* }
+term = _{ roll | int | "(" ~ expr ~ ")" }
 
 calc = _{ SOI ~ expr ~ EOI }
 

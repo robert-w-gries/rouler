@@ -30,28 +30,30 @@ pub struct RollParser;
 
 pub fn compute(expr: Pairs<Rule>) -> i64 {
     let primary = |pair: Pair<Rule>| match pair.as_rule() {
-        Rule::int => pair.as_str().parse::<u64>().unwrap() as i64,
-        Rule::number => pair.as_str().parse::<i64>().unwrap().into(),
+        Rule::uint => pair.as_str().parse::<u64>().unwrap() as i64,
+        Rule::int => pair.as_str().parse::<i64>().unwrap().into(),
         Rule::expr => compute(pair.into_inner()),
         Rule::roll => {
             let mut inner = pair.into_inner();
-            let num_rolls = {
+            let num_rolls: i64 = {
                 let rolls = inner.next().unwrap();
                 rolls.as_str().parse::<i64>().expect("Could not parse number of rolls")
             };
             let die_type = inner.next().unwrap();
             match die_type.as_rule() {
-                Rule::int => {
-                    let num_sides = die_type.as_str().parse::<i64>().expect("Could not parse number of sides");
-                    num_rolls.signum() * roll_dice_raw(num_rolls.abs(), num_sides as u64)
+                Rule::uint => {
+                    let num_sides = die_type.as_str().parse::<u64>().expect("Could not parse number of sides");
+                    let roll = roll_dice_raw(num_rolls.abs() as u64, num_sides) as i64;
+                    num_rolls.signum() * roll
                 },
                 Rule::custom_die => {
                     let mut inner = die_type.clone().into_inner();
                     let mut sides = vec![];
                     while let Some(side) = inner.next() {
-                        sides.push(side.as_str().parse::<u64>().expect("Could not parse custom side"));
+                        sides.push(side.as_str().parse::<i64>().expect("Could not parse custom side"));
                     }
-                    num_rolls.signum() * roll_custom_dice_raw(num_rolls.abs(), &sides)
+                    let roll = roll_custom_dice_raw(num_rolls.abs() as u64, &sides) as i64;
+                    num_rolls.signum() * roll
                 },
                 _ => unreachable!(),
             }

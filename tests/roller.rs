@@ -44,6 +44,13 @@ fn roll_custom_dice_within_range() {
 }
 
 #[test]
+fn roll_negative_custom_dice_within_range() {
+    for _ in 0..100 {
+        assert_range!(-14 => roll_dice("2d[-5, -6, -7]") => -10)
+    }
+}
+
+#[test]
 fn custom_dice_spaces_optional() {
     for _ in 0..100 {
         assert_range!(10 => roll_dice("2d[5,6,7]") => 14)
@@ -61,22 +68,19 @@ fn num_of_dice_nonzero() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to parse")]
-fn non_zero_sides_disallowed() {
-    assert!(Roller::new("3d-6").total() < 0);
+fn non_uint_sides_ignored() {
+    assert!(Roller::new("3d-6").total() == 3);
 }
 
 #[test]
-fn d_op_is_case_insensitive() {
+fn d_is_case_insensitive() {
     assert_range!(1 => Roller::new("1D6").total() => 6);
     assert_range!(1 => Roller::new("1d6").total() => 6);
 }
 
 #[test]
-#[ignore]
-#[should_panic(expected = "no pattern matched")]
 fn spaces_not_allowed_in_die_codes() {
-    assert_range!(1 => Roller::new("1 d 6").total() => 6)
+    assert!(Roller::new("1 d 6").total() == 1);
 }
 
 #[test]
