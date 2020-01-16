@@ -5,13 +5,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+use itertools::Itertools;
 use rand::{distributions::{Distribution, Uniform}, thread_rng};
 
 const MAX_ROLLS: u64 = 1000;
 const MAX_SIDES: u64 = u32::max_value() as u64;
 const MAX_CUSTOM_SIDES: usize = 1000;
 
-pub fn roll_dice_raw(num: u64, sides: u64) -> u64 {
+pub fn roll_dice_raw(num: u64, sides: u64, keep_highest: u64) -> u64 {
     if sides == 0 {
         return 0;
     }
@@ -32,7 +33,8 @@ pub fn roll_dice_raw(num: u64, sides: u64) -> u64 {
     // sampling of multiple values faster.
     let between = Uniform::from(1..(sides + 1));
     let mut rng = thread_rng();
-    (0..num).map(|_| between.sample(&mut rng)).fold(0, |acc, x| acc + x)
+    let rolls = (0..num).map(|_| between.sample(&mut rng)).sorted().rev().take(keep_highest as usize);
+    rolls.fold(0, |acc, x| acc + x)
 }
 
 pub fn roll_custom_dice_raw(num: u64, sides: &[i64]) -> i64 {
@@ -64,39 +66,60 @@ mod tests {
 
         #[test]
         fn zero_d_zero() {
-            assert_eq!(roll_dice_raw(0,0), 0);
+            assert_eq!(roll_dice_raw(0,0,0), 0);
         }
 
         #[test]
         fn one_d_zero() {
-            assert_eq!(roll_dice_raw(1,0), 0);
+            assert_eq!(roll_dice_raw(1,0,1), 0);
         }
 
         #[test]
         fn zero_d_one() {
-            assert_eq!(roll_dice_raw(0,1), 0);
+            assert_eq!(roll_dice_raw(0,1,0), 0);
         }
 
         #[test]
         fn x_d_one() {
             for x in 1..100 {
-                assert_eq!(roll_dice_raw(x,1), x);
+                assert_eq!(roll_dice_raw(x,1, x), x);
             }
         }
 
         #[test]
         fn one_d_x() {
             for x in 1..100 {
-                let roll = roll_dice_raw(1,x);
+                let roll = roll_dice_raw(1,x, 1);
                 assert!(1 <= roll && roll <= x);
             }
         }
 
         #[test]
         fn max() {
-            let roll = roll_dice_raw(u64::max_value(), u64::max_value());
+            let roll = roll_dice_raw(u64::max_value(), u64::max_value(), u64::max_value());
             let max = MAX_ROLLS * MAX_SIDES;
             assert!(1 <= roll && roll <= max);
+        }
+
+        #[test]
+        fn keep_two() {
+            assert_eq!(roll_dice_raw(5, 1, 2), 2);
+        }
+
+        #[test]
+        fn keep_more() {
+            assert_eq!(roll_dice_raw(5, 1, 6), 5);
+        }
+
+
+        #[test]
+        fn keep_zero() {
+            assert_eq!(roll_dice_raw(5, 1, 0), 0);
+        }
+
+        #[test]
+        fn keep_max() {
+            assert_eq!(roll_dice_raw(5, 1, u64::max_value()), 5);
         }
     }
 

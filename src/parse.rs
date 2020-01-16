@@ -35,16 +35,36 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
         Rule::expr => compute(pair.into_inner()),
         Rule::roll => {
             let mut inner = pair.into_inner();
-            let num_rolls: i64 = {
+            let num_rolls: u64 = {
                 let rolls = inner.next().unwrap();
-                rolls.as_str().parse::<i64>().expect("Could not parse number of rolls")
+                rolls.as_str().parse::<u64>().expect("Could not parse number of rolls")
             };
             let die_type = inner.next().unwrap();
+            let keep_highest: u64 = match inner.next() {
+                None => num_rolls,
+                Some(rule) => {
+                    let parsed = {
+                        let parsed = inner.next().unwrap().as_str().parse::<u64>().expect("Could not parse keep/drop number");
+                        // Ensure we aren't dropping/keeping more than specified number of rolls
+                        if parsed > num_rolls {
+                            num_rolls
+                        } else {
+                            parsed
+                        }
+                    };
+
+                    match rule.as_rule() {
+                        Rule::keep => parsed,
+                        Rule::drop => num_rolls - parsed,
+                        _ => unreachable!(),
+                    }
+                },
+            };
+
             match die_type.as_rule() {
                 Rule::uint => {
                     let num_sides = die_type.as_str().parse::<u64>().expect("Could not parse number of sides");
-                    let roll = roll_dice_raw(num_rolls.abs() as u64, num_sides) as i64;
-                    num_rolls.signum() * roll
+                    roll_dice_raw(num_rolls, num_sides, keep_highest) as i64
                 },
                 Rule::custom_die => {
                     let mut inner = die_type.clone().into_inner();
@@ -52,8 +72,7 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
                     while let Some(side) = inner.next() {
                         sides.push(side.as_str().parse::<i64>().expect("Could not parse custom side"));
                     }
-                    let roll = roll_custom_dice_raw(num_rolls.abs() as u64, &sides) as i64;
-                    num_rolls.signum() * roll
+                    roll_custom_dice_raw(num_rolls, &sides)
                 },
                 _ => unreachable!(),
             }

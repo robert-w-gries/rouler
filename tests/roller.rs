@@ -108,3 +108,21 @@ fn roll20_bad_roll_cmd() {
 fn roll20_including_addtional_information() {
     assert_range!(6 => Roller::new("/roll 1d20+5 \\ +5 Roll for Initiative").total() => 25);
 }
+
+#[test]
+fn drop_two() {
+    assert_eq!(Roller::new("5d1d2").total(), 3);
+    assert_eq!(Roller::new("5d1dl2").total(), 3);
+
+    assert_eq!(Roller::new("5d1D2").total(), 3);
+    assert_eq!(Roller::new("5d1DL2").total(), 3);
+}
+
+#[test]
+fn keep_two() {
+    assert_eq!(Roller::new("5d1k2").total(), 2);
+    assert_eq!(Roller::new("5d1kh2").total(), 2);
+
+    assert_eq!(Roller::new("5d1K2").total(), 2);
+    assert_eq!(Roller::new("5d1KH2").total(), 2);
+}
