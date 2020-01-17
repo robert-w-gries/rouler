@@ -10,8 +10,8 @@ op = _{ plus | minus | times | slash }
 
 roll = ${ die ~ take? ~ target_roll? }
 
-die = ${ num_rolls? ~ ^"d" ~ die_type }
-num_rolls = @{ uint }
+die = ${ count? ~ ^"d" ~ die_type }
+count = @{ uint }
 die_type = _{ custom_die | normal_die }
   custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
   normal_die = @{ uint }

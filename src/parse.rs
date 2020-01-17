@@ -42,7 +42,7 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
             let mut inner_die = inner.next().unwrap().clone().into_inner();
             while let Some(pair) = inner_die.next() {
                 match pair.as_rule() {
-                    Rule::num_rolls => {
+                    Rule::count => {
                         roll.count(pair.as_str().parse::<u64>().expect("Could not parse number of rolls"));
                     },
                     Rule::normal_die => {
