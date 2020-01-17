@@ -105,31 +105,29 @@ impl Roll {
 
     fn roll_normal_dice(&self) -> u64 {
         let mut results: Vec<u64> = if self.sides > 0 {
-            roll_dice_raw(self.count, self.sides)
+            // The `rand` docs recommend constructing `Uniform` distribution to make
+            // sampling of multiple values faster.
+            let between = Uniform::from(1..(self.sides + 1));
+            let mut rng = thread_rng();
+            (0..self.count).map(|_| between.sample(&mut rng)).collect()
         } else {
             // zero-sided dice will always roll zero
             vec![0; self.count as usize]
         };
 
         if let Some(take) = self.take {
+            let limit_take = |take_num: u64| -> u64 {
+                if take_num > self.count {
+                    self.count
+                } else {
+                    take_num
+                }
+            };
+
             results.sort_by(|a, b| a.cmp(b)); // sort by ascending
             results = match take {
-                Take::KeepHighest(kh) => {
-                    let kh = if kh > self.count {
-                        self.count
-                    } else {
-                        kh
-                    };
-                    results[..kh as usize].to_vec()
-                },
-                Take::DropLowest(dl) => {
-                    let dl = if dl > self.count {
-                        self.count
-                    } else {
-                        dl
-                    };
-                    results[dl as usize..].to_vec()
-                },
+                Take::KeepHighest(kh) => results[..limit_take(kh) as usize].to_vec(),
+                Take::DropLowest(dl) => results[limit_take(dl) as usize..].to_vec(),
             };
         }
 
@@ -161,16 +159,6 @@ impl Roll {
         let mut rng = thread_rng();
         (0..self.count).map(|_| custom_sides.choose(&mut rng).unwrap()).fold(0, |acc, x| acc + *x)
     }
-}
-
-fn roll_dice_raw(num_rolls: u64, sides: u64) -> Vec<u64> {
-    assert!(sides > 0);
-
-    // The `rand` docs recommend constructing `Uniform` distribution to make
-    // sampling of multiple values faster.
-    let between = Uniform::from(1..(sides + 1));
-    let mut rng = thread_rng();
-    (0..num_rolls).map(|_| between.sample(&mut rng)).collect()
 }
 
 #[cfg(test)]
@@ -237,24 +225,29 @@ mod tests {
         }
 
         #[test]
+        fn drop_none() {
+            assert_eq!(Roll::new().drop_lowest(0).roll_dice(), 0);
+        }
+
+        #[test]
         fn drop_two() {
-            assert_eq!(Roll::new().count(5).sides(1).keep_highest(2).roll_dice(), 2);
+            assert_eq!(Roll::new().count(5).sides(1).drop_lowest(2).roll_dice(), 3);
         }
 
         #[test]
         fn drop_more() {
-            assert_eq!(Roll::new().count(5).sides(1).keep_highest(6).roll_dice(), 5);
+            assert_eq!(Roll::new().count(5).sides(1).drop_lowest(6).roll_dice(), 0);
         }
 
 
         #[test]
         fn drop_zero() {
-            assert_eq!(Roll::new().count(5).sides(1).keep_highest(0).roll_dice(), 0);
+            assert_eq!(Roll::new().count(5).sides(1).drop_lowest(0).roll_dice(), 5);
         }
 
         #[test]
         fn drop_max() {
-            assert_eq!(Roll::new().count(5).sides(1).keep_highest(u64::max_value()).roll_dice(), 5);
+            assert_eq!(Roll::new().count(5).sides(1).drop_lowest(u64::max_value()).roll_dice(), 0);
         }
 
         #[test]

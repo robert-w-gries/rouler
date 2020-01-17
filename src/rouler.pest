@@ -1,5 +1,5 @@
 int = @{ sign? ~ uint }
-  sign = { "+" | "-" }
+  sign = @{ "+" | "-" }
   uint = @{ ASCII_DIGIT+ }
 
 op = _{ plus | minus | times | slash }
