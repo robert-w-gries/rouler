@@ -9,7 +9,7 @@ use pest::{
     prec_climber::*,
     iterators::*,
 };
-use roll::{Roll, TargetRoll};
+use roll::{DieType, Roll, TargetRoll};
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {
@@ -38,15 +38,31 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
 
             let mut roll = Roll::new();
 
-            let num_rolls: u64 = {
+            roll.count({
                 let num_rolls_str = inner.next().unwrap().as_str();
                 num_rolls_str.parse::<u64>().expect("Could not parse number of rolls")
-            };
-            roll.count(num_rolls);
+            });
 
             let die_type = inner.next().unwrap();
+            match die_type.as_rule() {
+                Rule::normal_die => {
+                    roll.sides(die_type.as_str().parse::<u64>().expect("Could not parse number of sides"));
+                    roll.die_type(DieType::Normal);
+                },
+                Rule::custom_die => {
+                    let mut inner = die_type.clone().into_inner();
+                    let mut sides = vec![];
+                    while let Some(side) = inner.next() {
+                        sides.push(side.as_str().parse::<i64>().expect("Could not parse custom side"));
+                    }
+                    roll.add_custom_sides(&sides);
+                    roll.die_type(DieType::Custom);
+                },
+                _ => unreachable!(),
+            }
 
-            // Invariant: This while loop should execute twice at most, once if there's a keep/drop and once for target roll
+            // Invariant: This while loop should execute twice at most
+            // Once if there's a keep/drop and once if there's a target roll
             while let Some(pair) = inner.next() {
                 let uint = inner.next().unwrap().as_str().parse::<u64>().expect("Could not parse uint");
                 match pair.as_rule() {
@@ -60,21 +76,7 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
                 };
             }
 
-            match die_type.as_rule() {
-                Rule::normal_die => {
-                    roll.sides(die_type.as_str().parse::<u64>().expect("Could not parse number of sides"));
-                    roll.roll_dice() as i64
-                },
-                Rule::custom_die => {
-                    let mut inner = die_type.clone().into_inner();
-                    let mut sides = vec![];
-                    while let Some(side) = inner.next() {
-                        sides.push(side.as_str().parse::<i64>().expect("Could not parse custom side"));
-                    }
-                    crate::roll::roll_custom_dice(num_rolls, &sides)
-                },
-                _ => unreachable!(),
-            }
+            roll.roll_dice()
         },
         _ => unreachable!(),
     };

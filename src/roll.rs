@@ -11,12 +11,9 @@ const MAX_ROLLS: u64 = 1000;
 const MAX_SIDES: u64 = u32::max_value() as u64;
 const MAX_CUSTOM_SIDES: usize = 1000;
 
-#[derive(Clone, Copy)]
-pub enum TargetRoll {
-    GT(u64),
-    GTE(u64),
-    LT(u64),
-    LTE(u64),
+pub enum DieType {
+    Custom,
+    Normal,
 }
 
 #[derive(Clone, Copy)]
@@ -25,8 +22,18 @@ pub enum Take {
     DropLowest(u64),
 }
 
+#[derive(Clone, Copy)]
+pub enum TargetRoll {
+    GT(u64),
+    GTE(u64),
+    LT(u64),
+    LTE(u64),
+}
+
 pub struct Roll {
-    num_rolls: u64,
+    count: u64,
+    custom_sides: Vec<i64>,
+    die_type: DieType,
     sides: u64,
     take: Option<Take>,
     target_roll: Option<TargetRoll>,
@@ -35,11 +42,18 @@ pub struct Roll {
 impl Roll {
     pub fn new() -> Self {
         Self {
-            num_rolls: 0,
+            count: 0,
+            custom_sides: Vec::new(),
+            die_type: DieType::Normal,
             sides: 0,
             take: None,
             target_roll: None,
         }
+    }
+
+    pub fn add_custom_sides<'a>(&'a mut self, custom_sides: &[i64]) -> &'a mut Self {
+        self.custom_sides.extend(custom_sides);
+        self
     }
 
     pub fn count<'a>(&'a mut self, count: u64) -> &'a mut Self {
@@ -48,7 +62,12 @@ impl Roll {
         } else {
             count
         };
-        self.num_rolls = count;
+        self.count = count;
+        self
+    }
+
+    pub fn die_type<'a>(&'a mut self, die_type: DieType) -> &'a mut Self {
+        self.die_type = die_type;
         self
     }
 
@@ -77,28 +96,35 @@ impl Roll {
         self
     }
 
-    pub fn roll_dice(&self) -> u64 {
+    pub fn roll_dice(&self) -> i64 {
+        match self.die_type {
+            DieType::Custom => self.roll_custom_dice(),
+            DieType::Normal => self.roll_normal_dice() as i64,
+        }
+    }
+
+    fn roll_normal_dice(&self) -> u64 {
         let mut results: Vec<u64> = if self.sides > 0 {
-            roll_dice_raw(self.num_rolls, self.sides)
+            roll_dice_raw(self.count, self.sides)
         } else {
             // zero-sided dice will always roll zero
-            vec![0; self.num_rolls as usize]
+            vec![0; self.count as usize]
         };
 
         if let Some(take) = self.take {
             results.sort_by(|a, b| a.cmp(b)); // sort by ascending
             results = match take {
                 Take::KeepHighest(kh) => {
-                    let kh = if kh > self.num_rolls {
-                        self.num_rolls
+                    let kh = if kh > self.count {
+                        self.count
                     } else {
                         kh
                     };
                     results[..kh as usize].to_vec()
                 },
                 Take::DropLowest(dl) => {
-                    let dl = if dl > self.num_rolls {
-                        self.num_rolls
+                    let dl = if dl > self.count {
+                        self.count
                     } else {
                         dl
                     };
@@ -119,6 +145,22 @@ impl Roll {
             results.iter().fold(0, |acc, x| acc + x)
         }
     }
+
+    fn roll_custom_dice(&self) -> i64 {
+        if self.custom_sides.is_empty() {
+            return 0;
+        }
+
+        let custom_sides = if self.custom_sides.len() > MAX_CUSTOM_SIDES {
+            &self.custom_sides[..MAX_CUSTOM_SIDES]
+        } else {
+            &self.custom_sides[..]
+        };
+
+        use rand::seq::SliceRandom;
+        let mut rng = thread_rng();
+        (0..self.count).map(|_| custom_sides.choose(&mut rng).unwrap()).fold(0, |acc, x| acc + *x)
+    }
 }
 
 fn roll_dice_raw(num_rolls: u64, sides: u64) -> Vec<u64> {
@@ -129,28 +171,6 @@ fn roll_dice_raw(num_rolls: u64, sides: u64) -> Vec<u64> {
     let between = Uniform::from(1..(sides + 1));
     let mut rng = thread_rng();
     (0..num_rolls).map(|_| between.sample(&mut rng)).collect()
-}
-
-pub fn roll_custom_dice(num: u64, sides: &[i64]) -> i64 {
-    if sides.is_empty() {
-        return 0;
-    }
-
-    let num = if num > MAX_ROLLS {
-        MAX_ROLLS
-    } else {
-        num
-    };
-
-    let sides = if sides.len() > MAX_CUSTOM_SIDES {
-        &sides[..MAX_CUSTOM_SIDES]
-    } else {
-        &sides[..]
-    };
-
-    use rand::seq::SliceRandom;
-    let mut rng = thread_rng();
-    (0..num).map(|_| sides.choose(&mut rng).unwrap()).fold(0, |acc, x| acc + *x)
 }
 
 #[cfg(test)]
@@ -176,7 +196,7 @@ mod tests {
         #[test]
         fn x_d_one() {
             for x in 1..100 {
-                assert_eq!(Roll::new().count(x).sides(1).roll_dice(), x);
+                assert_eq!(Roll::new().count(x).sides(1).roll_dice(), x as i64);
             }
         }
 
@@ -184,7 +204,7 @@ mod tests {
         fn one_d_x() {
             for x in 1..100 {
                 let roll = Roll::new().count(1).sides(x).roll_dice();
-                assert!(1 <= roll && roll <= x);
+                assert!(1 <= roll && roll <= x as i64);
             }
         }
 
@@ -192,7 +212,7 @@ mod tests {
         fn max() {
             let roll = Roll::new().count(u64::max_value()).sides(u64::max_value()).roll_dice();
             let max = MAX_ROLLS * MAX_SIDES;
-            assert!(1 <= roll && roll <= max);
+            assert!(1 <= roll && roll <= max as i64);
         }
 
         #[test]
@@ -274,44 +294,44 @@ mod tests {
     }
 
     mod custom {
-        use super::super::{MAX_ROLLS, MAX_CUSTOM_SIDES, roll_custom_dice};
+        use super::super::{MAX_ROLLS, MAX_CUSTOM_SIDES, DieType, Roll};
 
         #[test]
         fn zero_d_empty() {
-            assert_eq!(roll_custom_dice(0, &[]), 0);
+            assert_eq!(Roll::new().die_type(DieType::Custom).add_custom_sides(&[]).roll_dice(), 0);
         }
 
         #[test]
         fn one_d_empty() {
-            assert_eq!(roll_custom_dice(1, &[]), 0);
+            assert_eq!(Roll::new().die_type(DieType::Custom).count(1).roll_dice(), 0);
         }
 
         #[test]
         fn zero_d_one() {
-            assert_eq!(roll_custom_dice(0, &[42]), 0);
+            assert_eq!(Roll::new().die_type(DieType::Custom).add_custom_sides(&[42]).roll_dice(), 0);
         }
 
         #[test]
         fn one_d_one() {
-            assert_eq!(roll_custom_dice(1, &[42]), 42);
+            assert_eq!(Roll::new().die_type(DieType::Custom).count(1).add_custom_sides(&[42]).roll_dice(), 42);
         }
 
         #[test]
         fn one_d_many() {
             let sequence: Vec<i64> = (-25..25).collect();
-            let roll = roll_custom_dice(1, &sequence[..]);
+            let roll = Roll::new().die_type(DieType::Custom).count(1).add_custom_sides(&sequence[..]).roll_dice();
             assert!(-25 <= roll && roll <= 25);
         }
 
         #[test]
         fn many_d_one() {
-            assert_eq!(roll_custom_dice(100, &[42]), 100*42);
+            assert_eq!(Roll::new().die_type(DieType::Custom).count(100).add_custom_sides(&[42]).roll_dice(), 100*42);
         }
 
         #[test]
         fn max() {
             let custom_sides: Vec<i64> = (1..(MAX_CUSTOM_SIDES * 2) as i64).collect();
-            let roll = roll_custom_dice(u64::max_value(), &custom_sides[..]);
+            let roll = Roll::new().die_type(DieType::Custom).count(u64::max_value()).add_custom_sides(&custom_sides[..]).roll_dice();
             let max = (MAX_ROLLS as u64) * (MAX_CUSTOM_SIDES as u64);
             assert!(MAX_ROLLS as i64 <= roll && roll <= max as i64);
         }
