@@ -11,7 +11,12 @@ op = _{ plus | minus | times | slash }
 custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
 drop = @{ ^"dl" | ^"d" }
 keep = @{ ^"kh" | ^"k" }
-roll = ${ uint ~ ^"d" ~ (custom_die | uint) ~ ((drop | keep) ~ uint)? }
+target_roll = _{ gte | gt | lte | lt }
+  gt = @{ ">" }
+  gte = @{ ">=" }
+  lt = @{ "<" }
+  lte = @{ "<=" }
+roll = ${ uint ~ ^"d" ~ (custom_die | uint) ~ ((drop | keep) ~ uint)? ~ (target_roll ~ uint)? }
 
 expr = { term ~ (op ~ term)* ~ ANY* }
 term = _{ roll | int | "(" ~ expr ~ ")" }

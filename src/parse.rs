@@ -9,7 +9,7 @@ use pest::{
     prec_climber::*,
     iterators::*,
 };
-use random::*;
+use roll::{Roll, TargetRoll};
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {
@@ -35,36 +35,35 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
         Rule::expr => compute(pair.into_inner()),
         Rule::roll => {
             let mut inner = pair.into_inner();
-            let num_rolls: u64 = {
-                let rolls = inner.next().unwrap();
-                rolls.as_str().parse::<u64>().expect("Could not parse number of rolls")
-            };
-            let die_type = inner.next().unwrap();
-            let keep_highest: u64 = match inner.next() {
-                None => num_rolls,
-                Some(rule) => {
-                    let parsed = {
-                        let parsed = inner.next().unwrap().as_str().parse::<u64>().expect("Could not parse keep/drop number");
-                        // Ensure we aren't dropping/keeping more than specified number of rolls
-                        if parsed > num_rolls {
-                            num_rolls
-                        } else {
-                            parsed
-                        }
-                    };
 
-                    match rule.as_rule() {
-                        Rule::keep => parsed,
-                        Rule::drop => num_rolls - parsed,
-                        _ => unreachable!(),
-                    }
-                },
+            let mut roll = Roll::new();
+
+            let num_rolls: u64 = {
+                let num_rolls_str = inner.next().unwrap().as_str();
+                num_rolls_str.parse::<u64>().expect("Could not parse number of rolls")
             };
+            roll.count(num_rolls);
+
+            let die_type = inner.next().unwrap();
+
+            // Invariant: This while loop should execute twice at most, once if there's a keep/drop and once for target roll
+            while let Some(pair) = inner.next() {
+                let uint = inner.next().unwrap().as_str().parse::<u64>().expect("Could not parse uint");
+                match pair.as_rule() {
+                    Rule::keep => roll.keep_highest(uint),
+                    Rule::drop => roll.drop_lowest(uint),
+                    Rule::gt => roll.target_roll(TargetRoll::GT(uint)),
+                    Rule::gte => roll.target_roll(TargetRoll::GTE(uint)),
+                    Rule::lt => roll.target_roll(TargetRoll::LT(uint)),
+                    Rule::lte => roll.target_roll(TargetRoll::LTE(uint)),
+                    _ => unreachable!(),
+                };
+            }
 
             match die_type.as_rule() {
                 Rule::uint => {
-                    let num_sides = die_type.as_str().parse::<u64>().expect("Could not parse number of sides");
-                    roll_dice_raw(num_rolls, num_sides, keep_highest) as i64
+                    roll.sides(die_type.as_str().parse::<u64>().expect("Could not parse number of sides"));
+                    roll.roll_dice() as i64
                 },
                 Rule::custom_die => {
                     let mut inner = die_type.clone().into_inner();
@@ -72,7 +71,7 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
                     while let Some(side) = inner.next() {
                         sides.push(side.as_str().parse::<i64>().expect("Could not parse custom side"));
                     }
-                    roll_custom_dice_raw(num_rolls, &sides)
+                    crate::roll::roll_custom_dice(num_rolls, &sides)
                 },
                 _ => unreachable!(),
             }

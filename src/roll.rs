@@ -5,222 +5,315 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::cmp::Ordering;
-use std::fmt;
+use rand::{distributions::{Distribution, Uniform}, thread_rng};
 
-use parse::*;
-use pest::*;
-use pest::error::Error;
+const MAX_ROLLS: u64 = 1000;
+const MAX_SIDES: u64 = u32::max_value() as u64;
+const MAX_CUSTOM_SIDES: usize = 1000;
 
-/// A simple function for throwaway die rolls that do not need to be saved as a
-/// `Roller`. Provided for convenience.
-///
-/// Takes an input of a `&str` containing syntax for a die roll, returns total.
-///
-/// # Panics
-///
-/// As `roll_dice` parses its argument, it will thus panic if the given syntax is incorrect.
-///
-/// # Examples
-/// ```
-/// use rouler::roll_dice;
-///
-/// println!("Wizard HP at lvl 9: {}", roll_dice("6d6+6"));
-/// ```
-///
-pub fn roll_dice(r: &str) -> i64 {
-    let parser = RollParser::parse(Rule::calc, r);
-    compute(parser.expect("Failed to parse roll!"))
+#[derive(Clone, Copy)]
+pub enum TargetRoll {
+    GT(u64),
+    GTE(u64),
+    LT(u64),
+    LTE(u64),
 }
 
-/// A function for throwaway die rolls that do not need to be saved as a
-/// `Roller`. Provided for convenience.
-///
-/// Takes an input of a `&str` containing syntax for a die roll, returns Ok(total)
-/// if the input parses successfully, otherwise a `ParsingError`.
-///
-/// # Examples
-/// ```
-/// use rouler::roll_dice_or_fail;
-///
-/// assert!(roll_dice_or_fail("6d6").is_ok());
-/// assert!(roll_dice_or_fail("food4").is_err())
-/// ```
-pub fn roll_dice_or_fail(r: &str) -> Result<i64, Error<impl RuleType>> {
-    let parser = RollParser::parse(Rule::calc, r);
-    parser.map(|p| compute(p))
+#[derive(Clone, Copy)]
+pub enum Take {
+    KeepHighest(u64),
+    DropLowest(u64),
 }
 
-/// A function for safely creating a new `Roller` without panicking.
-///
-/// Takes a `&str` input and if the syntax parses, returns a Roller wrapped by a Result.
-/// Otherwise returns a `ParsingError`.
-///
-/// # Examples
-/// ```
-/// use rouler::roller_or_fail;
-///
-///
-/// ```
-pub fn roller_or_fail<'a>(r: &'a str) -> Result<Roller<'a>, Error<impl RuleType>> {
-    let parser = RollParser::parse(Rule::calc, r);
-    parser.map(|p| {
-        Roller {
-            roll: r,
-            total: compute(p),
-        }
-    })
+pub struct Roll {
+    num_rolls: u64,
+    sides: u64,
+    take: Option<Take>,
+    target_roll: Option<TargetRoll>,
 }
 
-/// The `Roller` is the core struct of the library. The basic principle is to provide a reusable
-/// container that provides a specific kind of die roll, so that it can be quickly and easily repeated
-/// whenever called for. Each container contains the syntax of the roll type it represents, and the
-/// value of the last roll it made. Containers are thus self-mutating, but self-contained.
-///
-/// The main benefit is thus in code organization, as one can store different types of rolls for
-/// easy use later.
-#[derive(Debug, Clone, Copy)]
-pub struct Roller<'a> {
-    roll: &'a str,
-    total: i64,
-}
-
-impl<'a> Roller<'a> {
-    /// Creates a new `Roller` with the given die roll syntax, and populates the stored total with a first
-    /// roll of the indicated dice. Because subsequent rerolls mutate the object in order to store the most
-    /// recent roll, it should be declared with `let mut` if you intend to reroll it.
-    ///
-    /// # Panics
-    ///
-    /// As a `Roller` rolls itself on creation, it thus triggers the parser, and incorrect syntax will cause
-    /// a panic.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rouler::Roller;
-    ///
-    /// let mut laser_damage = Roller::new("1d4*10");
-    ///
-    /// println!("Damage, rnd 1: {}", laser_damage.total());
-    /// println!("Damage, rnd 2: {}", laser_damage.reroll());
-    /// ```
-    ///
-    /// Rollers implement `Eq` and `Ord`, based on their current totals, so die results can be compared
-    /// directly without having to first call the `total` method:
-    ///
-    /// ```
-    /// # use rouler::Roller;
-    /// let att = Roller::new("1d20 + 5");
-    /// let def = Roller::new("1d20 + 2");
-    ///
-    /// if att > def {
-    ///     println!("You struck the monster!");
-    /// } else {
-    ///     println!("You missed!");
-    /// }
-    /// ```
-    ///
-    /// For convenience's sake, Rollers also implement `Display`, so they are printable:
-    ///
-    /// ```
-    /// # use rouler::Roller;
-    /// println!("{}", Roller::new("4d8 + 5"));
-    /// // => [4d8 + 5: 24]
-    /// ```
-    pub fn new(roll: &'a str) -> Self {
-        Roller {
-            roll: roll,
-            total: roll_dice(roll),
+impl Roll {
+    pub fn new() -> Self {
+        Self {
+            num_rolls: 0,
+            sides: 0,
+            take: None,
+            target_roll: None,
         }
     }
 
-    /// Rolls the `Roller`'s die roll, stores the value in total, and then returns it. In this way, you can use
-    /// `Roller::reroll()` in place as a value, rather than needing to call the method seperately.
-    ///
-    /// # Examples
-    /// ```
-    /// use rouler::Roller;
-    ///
-    /// let mut stat = Roller::new("3d6");
-    ///
-    /// println!("STR (3d6): {}", stat.total());        // => STR (3d6): 14
-    /// println!("DEX (3d6+1): {}", stat.reroll() + 1); // => DEX (3d6+1): 13
-    ///
-    /// println!("{}", stat);                           // prints [3d6: 12]
-    /// ```
-    pub fn reroll(&mut self) -> i64 {
-        self.total = roll_dice(self.roll);
-
-        self.total
+    pub fn count<'a>(&'a mut self, count: u64) -> &'a mut Self {
+        let count = if count > MAX_ROLLS {
+            MAX_ROLLS
+        } else {
+            count
+        };
+        self.num_rolls = count;
+        self
     }
 
-    /// Returns the result of the last roll made by the `Roller`.
-    pub fn total(&self) -> i64 {
-        self.total
+    pub fn drop_lowest<'a>(&'a mut self, drop_lowest: u64) -> &'a mut Self {
+        self.take = Some(Take::DropLowest(drop_lowest));
+        self
     }
 
-    /// Returns a reference to self for use as an `Iterator`. This allows for iterating infinitely and lazily over
-    /// successive rolls of the dice. By borrowing as mutable, the state of the internal total is preserved,
-    /// so that calls to `total()` will remain consistent.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use rouler::Roller;
-    /// // Collect multiple results to a vector:
-    /// let stats = Roller::new("3d6").iter().take(6).collect::<Vec<i64>>();
-    /// ```
-    ///
-    /// *Remember!* Rollers are infinite iterators: *always* use `take()` to avoid infinite loops!
-    /// This is safe:
-    ///
-    /// ```
-    /// # use rouler::Roller;
-    /// // Keep rolling until a result greater than a threshold:
-    /// assert!(Roller::new("4d6").iter().skip_while(|&x| x < 13).take(1).last().unwrap() >= 13);
-    /// ```
-    ///
-    /// But this will not terminate:
-    ///
-    /// ```rust,ignore
-    /// assert!(Roller::new("4d6").iter().skip_while(|&x| x < 13).last().unwrap() >= 13);
-    /// ```
-    pub fn iter(&mut self) -> &mut Self {
-        self.by_ref()
+    pub fn keep_highest<'a>(&'a mut self, keep_highest: u64) -> &'a mut Self {
+        self.take = Some(Take::KeepHighest(keep_highest));
+        self
     }
-}
 
-impl<'a> Iterator for Roller<'a> {
-    type Item = i64;
-
-    fn next(&mut self) -> Option<i64> {
-        Some(self.reroll())
+    pub fn sides<'a>(&'a mut self, sides: u64) -> &'a mut Self {
+        let sides = if sides > MAX_SIDES {
+            MAX_SIDES
+        } else {
+            sides
+        };
+        self.sides = sides;
+        self
     }
-}
 
-impl<'a> PartialEq for Roller<'a> {
-    fn eq(&self, other: &Roller) -> bool {
-        self.total == other.total
+    pub fn target_roll<'a>(&'a mut self, target_roll: TargetRoll) -> &'a mut Self {
+        self.target_roll = Some(target_roll);
+        self
     }
-}
 
-impl<'a> Eq for Roller<'a> {}
+    pub fn roll_dice(&self) -> u64 {
+        let mut results: Vec<u64> = if self.sides > 0 {
+            roll_dice_raw(self.num_rolls, self.sides)
+        } else {
+            // zero-sided dice will always roll zero
+            vec![0; self.num_rolls as usize]
+        };
 
-impl<'a> Ord for Roller<'a> {
-    fn cmp(&self, other: &Roller) -> Ordering {
-        self.total.cmp(&other.total)
-    }
-}
+        if let Some(take) = self.take {
+            results.sort_by(|a, b| a.cmp(b)); // sort by ascending
+            results = match take {
+                Take::KeepHighest(kh) => {
+                    let kh = if kh > self.num_rolls {
+                        self.num_rolls
+                    } else {
+                        kh
+                    };
+                    results[..kh as usize].to_vec()
+                },
+                Take::DropLowest(dl) => {
+                    let dl = if dl > self.num_rolls {
+                        self.num_rolls
+                    } else {
+                        dl
+                    };
+                    results[dl as usize..].to_vec()
+                },
+            };
+        }
 
-impl<'a> PartialOrd for Roller<'a> {
-    fn partial_cmp(&self, other: &Roller) -> Option<Ordering> {
-        Some(self.cmp(other))
+        if let Some(target_roll) = self.target_roll {
+            let success_count = match target_roll {
+                TargetRoll::GT(target_number) => results.iter().filter(|&roll| *roll > target_number).count(),
+                TargetRoll::GTE(target_number) => results.iter().filter(|&roll| *roll >= target_number).count(),
+                TargetRoll::LT(target_number) => results.iter().filter(|&roll| *roll < target_number).count(),
+                TargetRoll::LTE(target_number) => results.iter().filter(|&roll| *roll <= target_number).count(),
+            };
+            success_count as u64
+        } else {
+            results.iter().fold(0, |acc, x| acc + x)
+        }
     }
 }
 
-impl<'a> fmt::Display for Roller<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}: {}]", self.roll, self.total)
+fn roll_dice_raw(num_rolls: u64, sides: u64) -> Vec<u64> {
+    assert!(sides > 0);
+
+    // The `rand` docs recommend constructing `Uniform` distribution to make
+    // sampling of multiple values faster.
+    let between = Uniform::from(1..(sides + 1));
+    let mut rng = thread_rng();
+    (0..num_rolls).map(|_| between.sample(&mut rng)).collect()
+}
+
+pub fn roll_custom_dice(num: u64, sides: &[i64]) -> i64 {
+    if sides.is_empty() {
+        return 0;
+    }
+
+    let num = if num > MAX_ROLLS {
+        MAX_ROLLS
+    } else {
+        num
+    };
+
+    let sides = if sides.len() > MAX_CUSTOM_SIDES {
+        &sides[..MAX_CUSTOM_SIDES]
+    } else {
+        &sides[..]
+    };
+
+    use rand::seq::SliceRandom;
+    let mut rng = thread_rng();
+    (0..num).map(|_| sides.choose(&mut rng).unwrap()).fold(0, |acc, x| acc + *x)
+}
+
+#[cfg(test)]
+mod tests {
+    mod normal {
+        use super::super::{MAX_ROLLS, MAX_SIDES, Roll, TargetRoll};
+
+        #[test]
+        fn zero_d_zero() {
+            assert_eq!(Roll::new().count(0).sides(0).roll_dice(), 0);
+        }
+
+        #[test]
+        fn one_d_zero() {
+            assert_eq!(Roll::new().count(1).sides(0).roll_dice(), 0);
+        }
+
+        #[test]
+        fn zero_d_one() {
+            assert_eq!(Roll::new().count(0).sides(1).roll_dice(), 0);
+        }
+
+        #[test]
+        fn x_d_one() {
+            for x in 1..100 {
+                assert_eq!(Roll::new().count(x).sides(1).roll_dice(), x);
+            }
+        }
+
+        #[test]
+        fn one_d_x() {
+            for x in 1..100 {
+                let roll = Roll::new().count(1).sides(x).roll_dice();
+                assert!(1 <= roll && roll <= x);
+            }
+        }
+
+        #[test]
+        fn max() {
+            let roll = Roll::new().count(u64::max_value()).sides(u64::max_value()).roll_dice();
+            let max = MAX_ROLLS * MAX_SIDES;
+            assert!(1 <= roll && roll <= max);
+        }
+
+        #[test]
+        fn keep_two() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(2).roll_dice(), 2);
+        }
+
+        #[test]
+        fn keep_more() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(6).roll_dice(), 5);
+        }
+
+
+        #[test]
+        fn keep_zero() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(0).roll_dice(), 0);
+        }
+
+        #[test]
+        fn keep_max() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(u64::max_value()).roll_dice(), 5);
+        }
+
+        #[test]
+        fn drop_two() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(2).roll_dice(), 2);
+        }
+
+        #[test]
+        fn drop_more() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(6).roll_dice(), 5);
+        }
+
+
+        #[test]
+        fn drop_zero() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(0).roll_dice(), 0);
+        }
+
+        #[test]
+        fn drop_max() {
+            assert_eq!(Roll::new().count(5).sides(1).keep_highest(u64::max_value()).roll_dice(), 5);
+        }
+
+        #[test]
+        fn target_gt() {
+            assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::GT(1)).roll_dice(), 0);
+            assert_eq!(Roll::new().count(100).sides(100).target_roll(TargetRoll::GT(0)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(u64::max_value()).sides(u64::max_value()).target_roll(TargetRoll::GT(u64::max_value())).roll_dice(), 0);
+        }
+
+        #[test]
+        fn target_gte() {
+            assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::GTE(1)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).sides(100).target_roll(TargetRoll::GTE(0)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(u64::max_value()).sides(u64::max_value()).target_roll(TargetRoll::GTE(u64::max_value())).roll_dice(), 0);
+
+            assert_eq!(Roll::new().count(10).sides(0).target_roll(TargetRoll::GTE(0)).roll_dice(), 10);
+            assert_eq!(Roll::new().count(0).sides(10).target_roll(TargetRoll::GTE(0)).roll_dice(), 0);
+            assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::GTE(1)).roll_dice(), 100);
+        }
+
+        #[test]
+        fn target_lt() {
+            assert_eq!(Roll::new().count(100).sides(100).target_roll(TargetRoll::LT(101)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).sides(0).target_roll(TargetRoll::LT(1)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::LT(1)).roll_dice(), 0);
+            assert_eq!(Roll::new().count(0).sides(100).target_roll(TargetRoll::LT(1)).roll_dice(), 0);
+            assert_eq!(Roll::new().count(100).sides(0).target_roll(TargetRoll::LT(0)).roll_dice(), 0);
+        }
+
+        #[test]
+        fn target_lte() {
+            assert_eq!(Roll::new().count(100).sides(100).target_roll(TargetRoll::LTE(100)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).target_roll(TargetRoll::LTE(0)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::LTE(1)).roll_dice(), 100);
+            assert_eq!(Roll::new().sides(100).target_roll(TargetRoll::LTE(1)).roll_dice(), 0);
+        }
+    }
+
+    mod custom {
+        use super::super::{MAX_ROLLS, MAX_CUSTOM_SIDES, roll_custom_dice};
+
+        #[test]
+        fn zero_d_empty() {
+            assert_eq!(roll_custom_dice(0, &[]), 0);
+        }
+
+        #[test]
+        fn one_d_empty() {
+            assert_eq!(roll_custom_dice(1, &[]), 0);
+        }
+
+        #[test]
+        fn zero_d_one() {
+            assert_eq!(roll_custom_dice(0, &[42]), 0);
+        }
+
+        #[test]
+        fn one_d_one() {
+            assert_eq!(roll_custom_dice(1, &[42]), 42);
+        }
+
+        #[test]
+        fn one_d_many() {
+            let sequence: Vec<i64> = (-25..25).collect();
+            let roll = roll_custom_dice(1, &sequence[..]);
+            assert!(-25 <= roll && roll <= 25);
+        }
+
+        #[test]
+        fn many_d_one() {
+            assert_eq!(roll_custom_dice(100, &[42]), 100*42);
+        }
+
+        #[test]
+        fn max() {
+            let custom_sides: Vec<i64> = (1..(MAX_CUSTOM_SIDES * 2) as i64).collect();
+            let roll = roll_custom_dice(u64::max_value(), &custom_sides[..]);
+            let max = (MAX_ROLLS as u64) * (MAX_CUSTOM_SIDES as u64);
+            assert!(MAX_ROLLS as i64 <= roll && roll <= max as i64);
+        }
     }
 }
