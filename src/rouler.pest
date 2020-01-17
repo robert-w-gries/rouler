@@ -8,10 +8,10 @@ op = _{ plus | minus | times | slash }
   times = { "*" }
   slash = { "/" }
 
-roll = ${ num_rolls ~ ^"d" ~ die_type ~ take? ~ target_roll? }
+roll = ${ die ~ take? ~ target_roll? }
 
+die = ${ num_rolls? ~ ^"d" ~ die_type }
 num_rolls = @{ uint }
-
 die_type = _{ custom_die | normal_die }
   custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
   normal_die = @{ uint }

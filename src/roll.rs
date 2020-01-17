@@ -42,10 +42,10 @@ pub struct Roll {
 impl Roll {
     pub fn new() -> Self {
         Self {
-            count: 0,
+            count: 1,
             custom_sides: Vec::new(),
             die_type: DieType::Normal,
-            sides: 0,
+            sides: 20,
             take: None,
             target_roll: None,
         }
@@ -226,7 +226,7 @@ mod tests {
 
         #[test]
         fn drop_none() {
-            assert_eq!(Roll::new().drop_lowest(0).roll_dice(), 0);
+            assert_eq!(Roll::new().count(0).drop_lowest(0).roll_dice(), 0);
         }
 
         #[test]
@@ -280,9 +280,9 @@ mod tests {
         #[test]
         fn target_lte() {
             assert_eq!(Roll::new().count(100).sides(100).target_roll(TargetRoll::LTE(100)).roll_dice(), 100);
-            assert_eq!(Roll::new().count(100).target_roll(TargetRoll::LTE(0)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).sides(0).target_roll(TargetRoll::LTE(0)).roll_dice(), 100);
             assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::LTE(1)).roll_dice(), 100);
-            assert_eq!(Roll::new().sides(100).target_roll(TargetRoll::LTE(1)).roll_dice(), 0);
+            assert_eq!(Roll::new().count(0).sides(100).target_roll(TargetRoll::LTE(1)).roll_dice(), 0);
         }
     }
 
@@ -301,7 +301,7 @@ mod tests {
 
         #[test]
         fn zero_d_one() {
-            assert_eq!(Roll::new().die_type(DieType::Custom).add_custom_sides(&[42]).roll_dice(), 0);
+            assert_eq!(Roll::new().die_type(DieType::Custom).count(0).add_custom_sides(&[42]).roll_dice(), 0);
         }
 
         #[test]
