@@ -44,9 +44,16 @@ fn roll_custom_dice_within_range() {
 }
 
 #[test]
+fn roll_negative_custom_dice_within_range() {
+    for _ in 0..100 {
+        assert_range!(-14 => roll_dice("2d[-5, -6, -7]") => -10)
+    }
+}
+
+#[test]
 fn custom_dice_spaces_optional() {
     for _ in 0..100 {
-        assert_range!(10 => roll_dice("2d[5,6,7]") => 14)
+        assert_range!(10 => roll_dice("2d[ 5,6,7 ]") => 14)
     }
 }
 
@@ -56,28 +63,24 @@ fn negative_dice_negates_roll_value() {
 }
 
 #[test]
-#[should_panic(expected = "not be zero")]
 fn num_of_dice_nonzero() {
     assert!(Roller::new("0d6").total() == 0);
 }
 
 #[test]
-#[should_panic(expected = "greater than zero")]
-fn non_zero_sides_disallowed() {
-    assert!(Roller::new("3d-6").total() < 0);
+fn non_uint_sides_ignored() {
+    assert!(Roller::new("3d-6").total() == 3);
 }
 
 #[test]
-fn d_op_is_case_insensitive() {
+fn d_is_case_insensitive() {
     assert_range!(1 => Roller::new("1D6").total() => 6);
     assert_range!(1 => Roller::new("1d6").total() => 6);
 }
 
 #[test]
-#[ignore]
-#[should_panic(expected = "no pattern matched")]
 fn spaces_not_allowed_in_die_codes() {
-    assert_range!(1 => Roller::new("1 d 6").total() => 6)
+    assert!(Roller::new("1 d 6").total() == 1);
 }
 
 #[test]
@@ -87,4 +90,80 @@ fn rollers_are_iterators() {
 
     assert_eq!(5, roll5.len());
     assert_eq!(d20.total(), roll5.pop().unwrap());
+}
+
+#[test]
+fn roll20_ref_roll_cmd() {
+    assert_eq!(Roller::new("/roll 1 + 1").total(), 2);
+    assert_eq!(Roller::new("/r 1 + 1").total(), 2);
+}
+
+#[test]
+#[should_panic(expected = "Failed to parse")]
+fn roll20_ref_bad_roll_cmd() {
+    assert_ne!(Roller::new("/ro 1 + 1").total(), 2);
+}
+
+#[test]
+fn roll20_ref_including_addtional_information() {
+    assert_range!(6 => Roller::new("/roll 1d20+5 \\ +5 Roll for Initiative").total() => 25);
+}
+
+#[test]
+fn roll20_ref_drop_keep() {
+    assert_range!(5 => Roller::new("/roll 8d10d3").total() => 50); // modified to test smaller range
+}
+
+#[test]
+fn drop_two() {
+    assert_eq!(Roller::new("5d1d2").total(), 3);
+    assert_eq!(Roller::new("5d1dl2").total(), 3);
+
+    assert_eq!(Roller::new("5d1D2").total(), 3);
+    assert_eq!(Roller::new("5d1DL2").total(), 3);
+}
+
+#[test]
+fn keep_two() {
+    assert_eq!(Roller::new("5d1k2").total(), 2);
+    assert_eq!(Roller::new("5d1kh2").total(), 2);
+
+    assert_eq!(Roller::new("5d1K2").total(), 2);
+    assert_eq!(Roller::new("5d1KH2").total(), 2);
+}
+
+#[test]
+fn target_roll() {
+    assert_eq!(Roller::new("5d1>=1").total(), 5);
+    assert_eq!(Roller::new("5d1>1").total(), 0);
+    assert_eq!(Roller::new("5d1>0").total(), 5);
+
+    assert_eq!(Roller::new("5d1<=1").total(), 5);
+    assert_eq!(Roller::new("5d1<1").total(), 0);
+    assert_eq!(Roller::new("5d1<2").total(), 5);
+
+    assert_eq!(Roller::new("5d1==1").total(), 5);
+    assert_eq!(Roller::new("100d20==0").total(), 0);
+
+    assert_range!(0 => Roller::new("10d10kh8>=8").total() => 8);
+    assert_eq!(Roller::new("10d10kh8>=1").total(), 8);
+}
+
+#[test]
+fn no_roll_specified() {
+    assert_eq!(Roller::new("d1").total(), 1);
+    assert_range!(1 => Roller::new("d20").total() => 20);
+}
+
+#[test]
+fn gm_commands() {
+    assert_range!(35 => Roller::new("12d6 + 10d8kh8 + 15").total() => 151);
+    assert_range!(0 => Roller::new("18d20>16").total() => 18);
+}
+
+#[test]
+fn parens() {
+    assert_eq!(Roller::new("(1)").total(), 1);
+    assert_eq!(Roller::new("2 * (1+1)").total(), 4);
+    assert_eq!(Roller::new("2 * (100d1)").total(), 200);
 }

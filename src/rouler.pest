@@ -1,4 +1,6 @@
-number = @{ "-"? ~ ("0" | '1'..'9' ~ '0'..'9'*) }
+int = @{ sign? ~ uint }
+  sign = @{ "+" | "-" }
+  uint = @{ ASCII_DIGIT+ }
 
 op = _{ plus | minus | times | slash }
   plus = { "+" }
@@ -6,14 +8,30 @@ op = _{ plus | minus | times | slash }
   times = { "*" }
   slash = { "/" }
 
-dice = _{ number ~ (roll ~ number) }
-  roll = { "d" | "D" }
-custom_dice = { number ~ roll ~ sides }
-  sides = _{ "[" ~ number ~ ("," ~ number )* ~ "]" }
+roll = ${ die ~ take? ~ target_roll? }
+
+die = ${ count? ~ ^"d" ~ die_type }
+count = @{ uint }
+die_type = _{ custom_die | normal_die }
+  custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
+  normal_die = @{ uint }
+
+take = _{ (keep | drop) ~ uint }
+  drop = @{ ^"dl" | ^"d" }
+  keep = @{ ^"kh" | ^"k" }
+
+target_roll = _{ (gte | gt | lte | lt | eq) ~ uint }
+  gt = @{ ">" }
+  gte = @{ ">=" }
+  lt = @{ "<" }
+  lte = @{ "<=" }
+  eq = @{ "==" }
 
 expr = { term ~ (op ~ term)* }
-  term = _{ custom_dice | dice | number | "(" ~ expr ~ ")" }
+term = _{ roll | int | "(" ~ expr ~ ")" }
 
-calc = _{ soi ~ expr ~ eoi }
+roll_cmd = _{ "/roll" | "/r" }
+calc = _{ SOI ~ roll_cmd? ~ expr ~ ANY* ~ EOI }
 
-whitespace = _{ " " }
+WHITESPACE = _{ " " | "\t" | "\n" }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }

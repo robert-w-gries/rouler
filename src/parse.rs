@@ -9,18 +9,17 @@ use pest::{
     prec_climber::*,
     iterators::*,
 };
-use random::*;
+use roll::{DieType, Roll, TargetRoll};
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {
         use self::Assoc::*;
         use self::Rule::*;
 
-        // Order of precedence: "+-" is less than "*/" is less than "dD"
+        // Order of precedence: "+-" is less than "*/"
         PrecClimber::new(vec![
             Operator::new(plus, Left) | Operator::new(minus, Left),
             Operator::new(times, Left) | Operator::new(slash, Left),
-            Operator::new(roll, Right),
         ])
     };
 }
@@ -29,53 +28,72 @@ lazy_static! {
 #[grammar = "rouler.pest"]
 pub struct RollParser;
 
-// Force recompile when parse changes
-const _GRAMMAR : &'static str = include_str!("rouler.pest");
-
 pub fn compute(expr: Pairs<Rule>) -> i64 {
+    let primary = |pair: Pair<Rule>| match pair.as_rule() {
+        Rule::uint => pair.as_str().parse::<u64>().unwrap() as i64,
+        Rule::int => pair.as_str().parse::<i64>().unwrap().into(),
+        Rule::expr => compute(pair.into_inner()),
+        Rule::roll => {
+            let mut inner = pair.into_inner();
+
+            let mut roll = Roll::new();
+
+            // Loop through the nested die rules
+            let mut inner_die = inner.next().unwrap().clone().into_inner();
+            while let Some(pair) = inner_die.next() {
+                match pair.as_rule() {
+                    Rule::count => {
+                        roll.count(pair.as_str().parse::<u64>().expect("Could not parse number of rolls"));
+                    },
+                    Rule::normal_die => {
+                        roll.sides(pair.as_str().parse::<u64>().expect("Could not parse number of sides"));
+                        roll.die_type(DieType::Normal);
+                    },
+                    Rule::custom_die => {
+                        let mut inner = pair.clone().into_inner();
+                        let mut sides = vec![];
+                        while let Some(side) = inner.next() {
+                            sides.push(side.as_str().parse::<i64>().expect("Could not parse custom side"));
+                        }
+                        roll.add_custom_sides(&sides);
+                        roll.die_type(DieType::Custom);
+                    },
+                    _ => unreachable!(),
+                }
+            }
+
+            // Invariant: This while loop should execute twice at most
+            // Once if there's a keep/drop and once if there's a target roll
+            while let Some(pair) = inner.next() {
+                let uint = inner.next().unwrap().as_str().parse::<u64>().expect("Could not parse uint");
+                match pair.as_rule() {
+                    Rule::keep => roll.keep_highest(uint),
+                    Rule::drop => roll.drop_lowest(uint),
+                    Rule::gt => roll.target_roll(TargetRoll::GT(uint)),
+                    Rule::gte => roll.target_roll(TargetRoll::GTE(uint)),
+                    Rule::lt => roll.target_roll(TargetRoll::LT(uint)),
+                    Rule::lte => roll.target_roll(TargetRoll::LTE(uint)),
+                    Rule::eq => roll.target_roll(TargetRoll::EQ(uint)),
+                    _ => unreachable!(),
+                };
+            }
+
+            roll.roll_dice()
+        },
+        _ => unreachable!(),
+    };
+
+    let infix = |lhs: i64, op: Pair<Rule>, rhs: i64| match op.as_rule() {
+        Rule::plus => lhs + rhs,
+        Rule::minus => lhs - rhs,
+        Rule::times => lhs * rhs,
+        Rule::slash => lhs / rhs,
+        _ => unreachable!(),
+    };
+
     PREC_CLIMBER.climb(
         expr,
-        |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::number => pair.as_str().parse::<i64>().unwrap().into(),
-            Rule::expr => compute(pair.into_inner()),
-            Rule::custom_dice => {
-                let mut inner = pair.into_inner();
-                // LHS
-                let num = inner.next().unwrap();
-                let lhs = num.as_str().parse::<i64>().expect("Did not find a number on LHS!");
-                // Operator
-                let d = inner.next().unwrap().as_str();
-                assert!(d == "d" || d == "D");
-                // RHS
-                let mut sides = vec![];
-                while let Some(s) = inner.next() {
-                    // Collect numbers
-                    if s.as_rule() == Rule::number {
-                        sides.push(s.as_str().parse::<u64>().expect("Non-number found on RHS!"));
-                    }
-                }
-                lhs.signum() * roll_custom_dice_raw(lhs.abs(), &sides)
-            },
-            _ => unreachable!(),
-        },
-        |lhs: i64, op: Pair<Rule>, rhs: i64| match op.as_rule() {
-            Rule::roll => {
-                if rhs < 1 {
-                    panic!("Sides must be greater than zero")
-                } else {
-                    match lhs.signum() {
-                        0 => panic!("Number of sides must not be zero"),
-                        -1 => -roll_dice_raw(lhs.abs(), rhs as u64),
-                        1 => roll_dice_raw(lhs.abs(), rhs as u64),
-                        _ => unreachable!(),
-                    }
-                }
-            },
-            Rule::plus => lhs + rhs,
-            Rule::minus => lhs - rhs,
-            Rule::times => lhs * rhs,
-            Rule::slash => lhs / rhs,
-            _ => unreachable!(),
-        }
+        primary,
+        infix,
     )
 }
