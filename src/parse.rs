@@ -61,7 +61,7 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
             }
 
             match die_type.as_rule() {
-                Rule::uint => {
+                Rule::normal_die => {
                     roll.sides(die_type.as_str().parse::<u64>().expect("Could not parse number of sides"));
                     roll.roll_dice() as i64
                 },

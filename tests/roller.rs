@@ -53,7 +53,7 @@ fn roll_negative_custom_dice_within_range() {
 #[test]
 fn custom_dice_spaces_optional() {
     for _ in 0..100 {
-        assert_range!(10 => roll_dice("2d[5,6,7]") => 14)
+        assert_range!(10 => roll_dice("2d[ 5,6,7 ]") => 14)
     }
 }
 

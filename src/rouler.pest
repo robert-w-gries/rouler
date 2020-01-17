@@ -8,15 +8,23 @@ op = _{ plus | minus | times | slash }
   times = { "*" }
   slash = { "/" }
 
-custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
-drop = @{ ^"dl" | ^"d" }
-keep = @{ ^"kh" | ^"k" }
-target_roll = _{ gte | gt | lte | lt }
+roll = ${ num_rolls ~ ^"d" ~ die_type ~ take? ~ target_roll? }
+
+num_rolls = @{ uint }
+
+die_type = _{ custom_die | normal_die }
+  custom_die = !{ "[" ~ int ~ ("," ~ int )* ~ "]" }
+  normal_die = @{ uint }
+
+take = _{ (keep | drop) ~ uint }
+  drop = @{ ^"dl" | ^"d" }
+  keep = @{ ^"kh" | ^"k" }
+
+target_roll = _{ (gte | gt | lte | lt) ~ uint }
   gt = @{ ">" }
   gte = @{ ">=" }
   lt = @{ "<" }
   lte = @{ "<=" }
-roll = ${ uint ~ ^"d" ~ (custom_die | uint) ~ ((drop | keep) ~ uint)? ~ (target_roll ~ uint)? }
 
 expr = { term ~ (op ~ term)* ~ ANY* }
 term = _{ roll | int | "(" ~ expr ~ ")" }
