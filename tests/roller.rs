@@ -151,3 +151,10 @@ fn gm_commands() {
     assert_range!(35 => Roller::new("12d6 + 10d8kh8 + 15").total() => 151);
     assert_range!(0 => Roller::new("18d20>16").total() => 18);
 }
+
+#[test]
+fn parens() {
+    assert_eq!(Roller::new("(1)").total(), 1);
+    assert_eq!(Roller::new("2 * (1+1)").total(), 4);
+    assert_eq!(Roller::new("2 * (100d1)").total(), 200);
+}

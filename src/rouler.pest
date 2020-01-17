@@ -26,11 +26,11 @@ target_roll = _{ (gte | gt | lte | lt) ~ uint }
   lt = @{ "<" }
   lte = @{ "<=" }
 
-expr = { term ~ (op ~ term)* ~ ANY* }
+expr = { term ~ (op ~ term)* }
 term = _{ roll | int | "(" ~ expr ~ ")" }
 
 roll_cmd = _{ "/roll" | "/r" }
-calc = _{ SOI ~ roll_cmd? ~ expr ~ EOI }
+calc = _{ SOI ~ roll_cmd? ~ expr ~ ANY* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" | "\n" }
 COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
