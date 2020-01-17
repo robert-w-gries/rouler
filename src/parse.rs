@@ -73,6 +73,7 @@ pub fn compute(expr: Pairs<Rule>) -> i64 {
                     Rule::gte => roll.target_roll(TargetRoll::GTE(uint)),
                     Rule::lt => roll.target_roll(TargetRoll::LT(uint)),
                     Rule::lte => roll.target_roll(TargetRoll::LTE(uint)),
+                    Rule::eq => roll.target_roll(TargetRoll::EQ(uint)),
                     _ => unreachable!(),
                 };
             }

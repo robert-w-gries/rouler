@@ -20,11 +20,12 @@ take = _{ (keep | drop) ~ uint }
   drop = @{ ^"dl" | ^"d" }
   keep = @{ ^"kh" | ^"k" }
 
-target_roll = _{ (gte | gt | lte | lt) ~ uint }
+target_roll = _{ (gte | gt | lte | lt | eq) ~ uint }
   gt = @{ ">" }
   gte = @{ ">=" }
   lt = @{ "<" }
   lte = @{ "<=" }
+  eq = @{ "==" }
 
 expr = { term ~ (op ~ term)* }
 term = _{ roll | int | "(" ~ expr ~ ")" }

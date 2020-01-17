@@ -142,6 +142,9 @@ fn target_roll() {
     assert_eq!(Roller::new("5d1<1").total(), 0);
     assert_eq!(Roller::new("5d1<2").total(), 5);
 
+    assert_eq!(Roller::new("5d1==1").total(), 5);
+    assert_eq!(Roller::new("100d20==0").total(), 0);
+
     assert_range!(0 => Roller::new("10d10kh8>=8").total() => 8);
     assert_eq!(Roller::new("10d10kh8>=1").total(), 8);
 }

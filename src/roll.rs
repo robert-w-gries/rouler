@@ -28,6 +28,7 @@ pub enum TargetRoll {
     GTE(u64),
     LT(u64),
     LTE(u64),
+    EQ(u64),
 }
 
 pub struct Roll {
@@ -137,6 +138,7 @@ impl Roll {
                 TargetRoll::GTE(target_number) => results.iter().filter(|&roll| *roll >= target_number).count(),
                 TargetRoll::LT(target_number) => results.iter().filter(|&roll| *roll < target_number).count(),
                 TargetRoll::LTE(target_number) => results.iter().filter(|&roll| *roll <= target_number).count(),
+                TargetRoll::EQ(target_number) => results.iter().filter(|&roll| *roll == target_number).count(),
             };
             success_count as u64
         } else {
@@ -283,6 +285,14 @@ mod tests {
             assert_eq!(Roll::new().count(100).sides(0).target_roll(TargetRoll::LTE(0)).roll_dice(), 100);
             assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::LTE(1)).roll_dice(), 100);
             assert_eq!(Roll::new().count(0).sides(100).target_roll(TargetRoll::LTE(1)).roll_dice(), 0);
+        }
+
+        #[test]
+        fn target_eq() {
+            assert_eq!(Roll::new().count(100).sides(100).target_roll(TargetRoll::EQ(0)).roll_dice(), 0);
+            assert_eq!(Roll::new().count(100).sides(0).target_roll(TargetRoll::EQ(0)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(100).sides(1).target_roll(TargetRoll::EQ(1)).roll_dice(), 100);
+            assert_eq!(Roll::new().count(0).sides(100).target_roll(TargetRoll::EQ(0)).roll_dice(), 0);
         }
     }
 
